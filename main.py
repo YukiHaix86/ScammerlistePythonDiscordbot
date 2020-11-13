@@ -25,8 +25,16 @@ async def on_ready():
 async def check_scammer(ctx, *, message):
     # message is the context that gets passed to the request
 
-    request = requests.get("https://api.mojang.com/users/profiles/minecraft/%s" % message).json()
-    userinput = request.get('id')
+    request = requests.get("https://api.mojang.com/users/profiles/minecraft/%s" % message)
+    if request.status_code == 204:
+        await ctx.send("Fehler, Spieler existiert nicht")
+    else:
+        request = requests.get("https://api.mojang.com/users/profiles/minecraft/%s" % message).json()
+        userinput = request.get('id')
+
+
+
+
     # request return id into variable userinput
     # print userinput for debug
     #await ctx.send(userinput)
@@ -34,43 +42,41 @@ async def check_scammer(ctx, *, message):
     # establish mariab connection
     try:
         mydb = mariadb.connect(
-            host="",
+            host="localhost",
             user="",
             password="",
             database=""
         )
+
     except mariadb.Error as e:
+        await ctx.send("Etwas ist schiefgelaufen")
         print(f"Error connecting to MariaDB Platform: {e}")
-        sys.exit(1)
+        await ctx.send("Etwas ist schiefgelaufen")
 
-    # just debug
-   # await ctx.send("test1")
-
-    # SQL Query
-    mycursor = mydb.cursor()
+    cursor = mydb.cursor()
 
     sql = ("select * from liste where uuid = '" + userinput + "' order by datum desc limit 1")
-    mycursor.execute(sql)
+    cursor.execute(sql)
 
     # Create list from Query to easily use the context
-    mylist = list(mycursor.fetchall())
+    mylist = list(cursor.fetchall())
 
-    OutputString = str(mylist).strip('[]')
+    if len(mylist) == 0:
+        await ctx.send("Spieler nicht in der Datenbank gefunden")
+    else:
+        OutputString = str(mylist).strip('[]')
+        OutputList = OutputString.split(',')
 
-    OutputList = OutputString.split(',')
+        request = requests.get("https://api.mojang.com/users/profiles/minecraft/%s" % message).json()
+        username = request.get('name')
 
-    print(OutputList[2].strip("'").strip(" '"))
+        embedOut = discord.Embed(title="FCR-Scammerliste Suche", description="Wir haben unsere Datenbank dursucht", color=0x00ff00)
+        embedOut.set_thumbnail(url="https://minotar.net/cube/"+userinput+"/400.png")
+        embedOut.add_field(name="Spielername", value=username, inline=False)
+        embedOut.add_field(name="Datenbank ID", value=OutputList[0].strip("'").strip(" '").strip(" ("), inline=True)
+        embedOut.add_field(name="UUID", value=userinput, inline=False)
+        embedOut.add_field(name="Hinterlegter Beweis", value=OutputList[3].strip("'").strip(" '"), inline=False)
 
-    request = requests.get("https://api.mojang.com/users/profiles/minecraft/%s" % message).json()
-    username = request.get('name')
-
-    embedOut = discord.Embed(title="FCR-Scammerliste Suche", description="Wir haben unsere Datenbank dursucht", color=0x00ff00)
-    embedOut.set_thumbnail(url="https://minotar.net/cube/"+userinput+"/400.png")
-    embedOut.add_field(name="Spielername", value=username, inline=False)
-    embedOut.add_field(name="Datenbank ID", value=OutputList[0].strip("'").strip(" '").strip(" ("), inline=True)
-    embedOut.add_field(name="UUID", value=userinput, inline=False)
-    embedOut.add_field(name="Hinterlegter Beweis", value=OutputList[3].strip("'").strip(" '"), inline=False)
-
-    await ctx.send(embed=embedOut)
+        await ctx.send(embed=embedOut)
 
 bot.run("")
